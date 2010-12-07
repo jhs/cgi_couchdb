@@ -1,4 +1,4 @@
-%% Example CocuhDB plugin module--really just an Erlang module.
+%% Module to handle _cgi requests in design documents.
 
 -module(cgi_couchdb).
 -author('Jason Smith <jhs@couchone.com>').
