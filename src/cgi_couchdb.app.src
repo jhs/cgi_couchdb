@@ -1,1 +1,13 @@
-{application, cgi_couchdb, [] }.
+{ application, cgi_couchdb
+, [ {description, "CouchDB CGI ddoc handler"}
+  , {vsn, "0.1.0"}
+  , {registered, []}
+  , {applications, [ kernel
+                   , stdlib
+                   , cgi_couchdb
+                   ]
+    }
+  , {mod, cgi_couchdb_app, []}
+  , {env, []}
+  ]
+}.
