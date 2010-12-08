@@ -15,7 +15,10 @@ print LOG "Starting closer: $$: @ARGV\n";
 
 my $length = <STDIN>;
 chomp $length;
+die "Unknown length: $length" unless($length =~ /^(\d+)$/);
 print LOG "Reading $length bytes from STDIN\n";
+
+open CGI, '|-', 'ruby' or die $!;
 
 my ($buf, $got_size);
 my $CHUNK_SIZE = 4096;
@@ -27,13 +30,16 @@ while($remaining > 0) {
   die "Received end-of-file, but $remaining bytes (out of total $length) expected" if($got_size == 0);
   $remaining -= $got_size;
   die "Received greater-than-expected data ($remaining, expected=$length)" if($remaining < 0);
+
+  print CGI $buf;
 }
 
 print LOG "Remaining is just right: $remaining\n";
+close CGI;
 
-print STDOUT "Content-Type: text/html\r\n\r\n";
-print STDOUT "<a href='/blah'>Link!</a><br>\n";
-print STDOUT "CGI: Thank you, I got it all\n";
+#print STDOUT "Content-Type: text/html\r\n\r\n";
+#print STDOUT "<a href='/blah'>Link!</a><br>\n";
+#print STDOUT "CGI: Thank you, I got it all\n";
 
 print LOG "Exiting\n";
 close LOG;
