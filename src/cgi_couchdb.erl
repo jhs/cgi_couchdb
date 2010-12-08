@@ -52,8 +52,10 @@ handle_cgi_req(Req, Db, DDoc)
         end
     .
 
-run_cgi(Req, Db, DDoc, ProgramName, Environment, SourceCode)
-    -> ?LOG_DEBUG("Running CGI ~p with ~p against:\n~p", [ProgramName, Environment, SourceCode])
+run_cgi(Req, Db, DDoc, ProgramName, DDocEnv, SourceCode)
+    -> ?LOG_DEBUG("Running CGI ~p with ~p against:\n~p", [ProgramName, DDocEnv, SourceCode])
+    , {ok, CgiEnv} = env_for_request(Req)
+    , Environment = lists:keymerge(1, lists:keysort(1, DDocEnv), lists:keysort(1, CgiEnv)) % Prefer the ddoc environment over the auto-generated one.
     , {ok, Subprocess} = cgi_subprocess(ProgramName, Environment, SourceCode)
     , {ok, Resp} = stream_from_subprocess(Req, Subprocess)
     , {ok, Resp} = couch_httpd:last_chunk(Resp)
@@ -168,6 +170,23 @@ receive_from_subprocess(Subprocess)
             -> ?LOG_ERROR("Subprocess timed out", [])
             , exit(timeout)
     end
+    .
+
+env_for_request(Req)
+    -> ?LOG_DEBUG("Building environment for request:\n~p", [Req])
+    , {ok, [{K, couch_util:to_list(V)} || {K, V} <- env_for_request(Req, raw)]}
+    .
+
+env_for_request(#httpd{mochi_req=MochiReq}=Req, raw)
+    %-> [_Db, <<"_design">>, _DDName, _CgiTrigger | ScriptAndPath] = Req#httpd.path_parts % TODO: queries for /_cgi and /_cgi/ are throwing badmatch
+    -> {FullPath, QueryString, _Anchor} = mochiweb_util:urlsplit_path(MochiReq:get(raw_path))
+    , [ {"REQUEST_METHOD"   , Req#httpd.method}
+      , {"GATEWAY_INTERFACE", "CGI/1.1"}
+      , {"PATH_TRANSLATED"  , FullPath}
+      , {"HTTP_COOKIE"      , couch_httpd:header_value(Req, "Cookie", "")}
+      , {"QUERY_STRING"     , QueryString}
+      , {"CONTENT_LENGTH"   , couch_httpd:header_value(Req, "Content-Length", "")}
+      ]
     .
 
 % vim: sw=4 sts=4 et
