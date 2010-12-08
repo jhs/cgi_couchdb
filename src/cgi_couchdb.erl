@@ -40,7 +40,7 @@ handle_cgi_req(Req, Db, DDoc)
                             -> {inline, Inlined}
                         ; {CodeObj}
                             -> case couch_util:get_value(<<"attachment">>, CodeObj)
-                                of AttachmentName when is_list(AttachmentName)
+                                of AttachmentName when is_binary(AttachmentName)
                                     -> {attachment, AttachmentName, DDoc}
                                 ; _ -> error({not_found, "CGI \"code\" object is missing \"attachment\" definition"})
                                 end
