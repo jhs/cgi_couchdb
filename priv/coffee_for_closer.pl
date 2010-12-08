@@ -10,8 +10,14 @@
 
 use strict;
 
-my $logfile = $ENV{'cgi_debug'} ? '/tmp/cgilog' : '/dev/null';
-open LOG, '>', $logfile or die $!;
+my $logfile = '/dev/null';
+if($ENV{'cgi_debug'}) {
+  $logfile = '/tmp/cgilog';
+  close STDERR;
+  open(STDERR, '>>', $logfile) or die $!;
+}
+
+open LOG, '>>', $logfile or die $!;
 print LOG "Starting closer: $$: $ARGV[0]\n";
 
 my $length = <STDIN>;
