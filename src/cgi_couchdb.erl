@@ -73,6 +73,7 @@ cgi_subprocess(ProgramName, Environment, SourceCode)
             % Other programs presumably know how to do this already.
             -> [binary_to_list(ProgramName)]
         end
+    , ?LOG_DEBUG("Launching subprocess: args=~p env=~p", [Args, Environment])
     , Port = open_port({spawn_executable, Closer}, [binary, stream, {args, Args}, {env, Environment}]) % TODO: catch
     , case Port
         of Port when is_port(Port)
