@@ -9,13 +9,13 @@
 
 handle_cgi_req(Req, Db, DDoc)
     -> ?LOG_DEBUG("CGI request: ~p", [Req#httpd.path_parts])
+    , [_Db, <<"_design">>, _DDName, _CgiTrigger, CgiKey | PathInfoParts] = Req#httpd.path_parts % TODO: queries for /_cgi and /_cgi/ are throwing badmatch
     , {DDocBody} = DDoc#doc.body
     , case couch_util:get_value(<<"cgi">>, DDocBody)
         of undefined
             -> error({not_found, "Design document has no CGI definitions"})
         ; {CgiDefinitions}
-            -> [_Db, <<"_design">>, _DDName, _CgiTrigger, CgiKey | PathInfoParts] = Req#httpd.path_parts
-            , ?LOG_DEBUG("CGI definition: ~p", [CgiDefinitions])
+            -> ?LOG_DEBUG("CGI definition: ~p", [CgiDefinitions])
             , case couch_util:get_value(CgiKey, CgiDefinitions)
                 of undefined
                     -> error({not_found, io_lib:format("No such CGI definition: ~s", [CgiKey])})
@@ -41,7 +41,7 @@ handle_cgi_req(Req, Db, DDoc)
                         ; {CodeObj}
                             -> case couch_util:get_value(<<"attachment">>, CodeObj)
                                 of AttachmentName when is_list(AttachmentName)
-                                    -> {attachment, AttachmentName}
+                                    -> {attachment, AttachmentName, DDoc}
                                 ; _ -> error({not_found, "CGI \"code\" object is missing \"attachment\" definition"})
                                 end
                         end
@@ -54,31 +54,41 @@ handle_cgi_req(Req, Db, DDoc)
 
 run_cgi(Req, Db, DDoc, ProgramName, Environment, SourceCode)
     -> ?LOG_DEBUG("Running CGI ~p with ~p against ~p", [ProgramName, Environment, SourceCode])
-    , {ok, Subprocess} = cgi_subprocess(Req, Db, DDoc)
+    , {ok, Subprocess} = cgi_subprocess(ProgramName, Environment, SourceCode)
     , {ok, Resp} = couch_httpd:start_chunked_response(Req, 200, [{"Content-Type", "text/plain"}])
     , {ok, Resp} = stream_from_subprocess(Resp, {ok, Subprocess})
     , {ok, Resp} = couch_httpd:last_chunk(Resp)
     .
 
-cgi_subprocess(Req, Db, DDoc)
-    -> ?LOG_DEBUG("Subprocess for request: ~p\n", [Req])
-    , process_flag(trap_exit, true)
-    %, ?LOG_INFO("Db ~p\n", [Db])
-    %, ?LOG_INFO("DDoc ~p\n", [DDoc])
-    , Att = lists:nth(1, DDoc#doc.atts)
-    , ?LOG_INFO("Attachment length: ~p", [Att#att.att_len])
+cgi_subprocess(ProgramName, Environment, SourceCode)
+    -> process_flag(trap_exit, true)
     , Closer = filename:join(code:priv_dir(?MODULE), "coffee_for_closer.pl")
-    , Env = []
     , Args = ["first", "second"]
-    , Port = open_port({spawn_executable, Closer}, [binary, stream, {args, Args}, {env, Env}]) % TODO: catch
+    , Port = open_port({spawn_executable, Closer}, [binary, stream, {args, Args}, {env, Environment}]) % TODO: catch
     , case Port
         of Port when is_port(Port)
             -> ?LOG_INFO("Sending code to subprocess: ~p", [self()])
-            , port_command(Port, [integer_to_list(Att#att.att_len), <<"\n">>])
-            , {ok, Port} = couch_doc:att_foldl_decode(Att, fun stream_to_subprocess/2, {ok, Port})
+            , ok = case SourceCode
+                of {inline, Data}
+                    -> Size = size(Data)
+                    , ?LOG_DEBUG("Sending ~p bytes of inlined code to subprocess", [Size])
+                    , port_command(Port, [integer_to_list(Size), "\n"])
+                    , port_command(Port, Data)
+                    , ok
+                ; {attachment, Filename, DDoc}
+                    -> error({not_found, "Don't know how to do attachments yet"})
+                end
+            %, port_command(Port, [integer_to_list(Att#att.att_len), <<"\n">>])
+            %, {ok, Port} = couch_doc:att_foldl_decode(Att, fun stream_to_subprocess/2, {ok, Port})
+
+            % All sent; return the subprocess port.
+            , {ok, Port}
         ; Error
             -> exit({open_port_failed, Error, [{request, theRequest}]})
         end
+
+    %, Att = lists:nth(1, DDoc#doc.atts)
+    %, ?LOG_INFO("Attachment length: ~p", [Att#att.att_len])
     .
 
 stream_to_subprocess(Data, {ok, Subprocess}=State)
