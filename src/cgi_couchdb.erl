@@ -64,7 +64,15 @@ run_cgi(Req, Db, DDoc, ProgramName, DDocEnv, SourceCode)
 cgi_subprocess(ProgramName, Environment, SourceCode)
     -> process_flag(trap_exit, true)
     , Closer = filename:join(code:priv_dir(?MODULE), "coffee_for_closer.pl")
-    , Args = [binary_to_list(ProgramName)]
+    , Args = case ProgramName
+        of <<"node">>
+            % NodeJS is special-cased because it is awesome. A static helper script makes it evaluate the code on standard input.
+            -> StdinJS = filename:join(code:priv_dir(?MODULE), "stdin.js")
+            , [binary_to_list(ProgramName), StdinJS]
+        ; _
+            % Other programs presumably know how to do this already.
+            -> [binary_to_list(ProgramName)]
+        end
     , Port = open_port({spawn_executable, Closer}, [binary, stream, {args, Args}, {env, Environment}]) % TODO: catch
     , case Port
         of Port when is_port(Port)
