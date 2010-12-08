@@ -186,10 +186,12 @@ env_for_request(Req)
     .
 
 env_for_request(#httpd{mochi_req=MochiReq}=Req, raw)
-    %-> [_Db, <<"_design">>, _DDName, _CgiTrigger | ScriptAndPath] = Req#httpd.path_parts % TODO: queries for /_cgi and /_cgi/ are throwing badmatch
     -> {FullPath, QueryString, _Anchor} = mochiweb_util:urlsplit_path(MochiReq:get(raw_path))
+    , [Db, <<"_design">>, DDName, CgiTrigger, Script | RestParts] = Req#httpd.path_parts
     , [ {"REQUEST_METHOD"   , Req#httpd.method}
       , {"GATEWAY_INTERFACE", "CGI/1.1"}
+      , {"SCRIPT_NAME"      , filename:join([binary_to_list(X) || X <- [Db, <<"_design">>, DDName, CgiTrigger, Script]])}
+      , {"PATH_INFO"        , case RestParts of [] -> ""; _ -> "/" ++ filename:join([binary_to_list(X) || X <- RestParts]) end}
       , {"PATH_TRANSLATED"  , FullPath}
       , {"HTTP_COOKIE"      , couch_httpd:header_value(Req, "Cookie", "")}
       , {"QUERY_STRING"     , QueryString}
