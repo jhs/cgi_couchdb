@@ -66,7 +66,7 @@ cgi_subprocess(ProgramName, Environment, SourceCode)
     , Port = open_port({spawn_executable, Closer}, [binary, stream, {args, Args}, {env, Environment}]) % TODO: catch
     , case Port
         of Port when is_port(Port)
-            -> ?LOG_INFO("Sending code to subprocess: ~p", [self()])
+            -> ?LOG_DEBUG("Sending code to subprocess: ~p", [self()])
             , ok = case SourceCode
                 of {inline, Data}
                     -> Size = size(Data)
@@ -95,7 +95,7 @@ cgi_subprocess(ProgramName, Environment, SourceCode)
     .
 
 stream_to_subprocess(Data, {ok, Subprocess}=State)
-    -> ?LOG_INFO("Sending ~p bytes to subprocess", [iolist_size(Data)])
+    -> ?LOG_DEBUG("Sending ~p bytes to subprocess", [iolist_size(Data)])
     , port_command(Subprocess, Data)
     , State
     .
