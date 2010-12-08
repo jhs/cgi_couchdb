@@ -11,14 +11,14 @@
 use strict;
 
 open LOG, '>', '/tmp/log' or die $!;
-print LOG "Starting closer: $$: @ARGV\n";
+print LOG "Starting closer: $$: $ARGV[0]\n";
 
 my $length = <STDIN>;
 chomp $length;
 die "Unknown length: $length" unless($length =~ /^(\d+)$/);
 print LOG "Reading $length bytes from STDIN\n";
 
-open CGI, '|-', 'ruby' or die $!;
+open(CGI, '|-', $ARGV[0]) or die $!;
 
 my ($buf, $got_size);
 my $CHUNK_SIZE = 4096;

@@ -63,7 +63,7 @@ run_cgi(Req, Db, DDoc, ProgramName, Environment, SourceCode)
 cgi_subprocess(ProgramName, Environment, SourceCode)
     -> process_flag(trap_exit, true)
     , Closer = filename:join(code:priv_dir(?MODULE), "coffee_for_closer.pl")
-    , Args = ["first", "second"]
+    , Args = [binary_to_list(ProgramName)]
     , Port = open_port({spawn_executable, Closer}, [binary, stream, {args, Args}, {env, Environment}]) % TODO: catch
     , case Port
         of Port when is_port(Port)
