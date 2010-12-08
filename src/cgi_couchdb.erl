@@ -53,7 +53,7 @@ handle_cgi_req(Req, Db, DDoc)
     .
 
 run_cgi(Req, Db, DDoc, ProgramName, Environment, SourceCode)
-    -> ?LOG_DEBUG("Running CGI ~p with ~p against ~p", [ProgramName, Environment, SourceCode])
+    -> ?LOG_DEBUG("Running CGI ~p with ~p against:\n~p", [ProgramName, Environment, SourceCode])
     , {ok, Subprocess} = cgi_subprocess(ProgramName, Environment, SourceCode)
     , {ok, Resp} = couch_httpd:start_chunked_response(Req, 200, [{"Content-Type", "text/plain"}])
     , {ok, Resp} = stream_from_subprocess(Resp, {ok, Subprocess})
@@ -76,19 +76,23 @@ cgi_subprocess(ProgramName, Environment, SourceCode)
                     , port_command(Port, Data)
                     , ok
                 ; {attachment, Filename, DDoc}
-                    -> error({not_found, "Don't know how to do attachments yet"})
+                    -> ?LOG_DEBUG("Attachments ~p: ~p", [Filename, DDoc#doc.atts])
+                    , case lists:keyfind(Filename, 2, DDoc#doc.atts)
+                        of false
+                            -> error({not_found, io_lib:format("No such attachment for CGI: ~s", [Filename])})
+                        ; Att when is_record(Att, att)
+                            -> ?LOG_DEBUG("Processing attachment ~p with size ~p", [Att#att.name, Att#att.att_len])
+                            , port_command(Port, [integer_to_list(Att#att.att_len), "\n"])
+                            , {ok, Port} = couch_doc:att_foldl_decode(Att, fun stream_to_subprocess/2, {ok, Port})
+                            , ok
+                        end
                 end
-            %, port_command(Port, [integer_to_list(Att#att.att_len), <<"\n">>])
-            %, {ok, Port} = couch_doc:att_foldl_decode(Att, fun stream_to_subprocess/2, {ok, Port})
 
             % All sent; return the subprocess port.
             , {ok, Port}
         ; Error
             -> exit({open_port_failed, Error, [{request, theRequest}]})
         end
-
-    %, Att = lists:nth(1, DDoc#doc.atts)
-    %, ?LOG_INFO("Attachment length: ~p", [Att#att.att_len])
     .
 
 stream_to_subprocess(Data, {ok, Subprocess}=State)
