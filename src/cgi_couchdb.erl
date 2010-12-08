@@ -55,8 +55,7 @@ handle_cgi_req(Req, Db, DDoc)
 run_cgi(Req, Db, DDoc, ProgramName, Environment, SourceCode)
     -> ?LOG_DEBUG("Running CGI ~p with ~p against:\n~p", [ProgramName, Environment, SourceCode])
     , {ok, Subprocess} = cgi_subprocess(ProgramName, Environment, SourceCode)
-    , {ok, Resp} = couch_httpd:start_chunked_response(Req, 200, [{"Content-Type", "text/plain"}])
-    , {ok, Resp} = stream_from_subprocess(Resp, {ok, Subprocess})
+    , {ok, Resp} = stream_from_subprocess(Req, Subprocess)
     , {ok, Resp} = couch_httpd:last_chunk(Resp)
     .
 
@@ -101,17 +100,64 @@ stream_to_subprocess(Data, {ok, Subprocess}=State)
     , State
     .
 
-stream_from_subprocess(Resp, {ok, Subprocess}=State)
-    -> ?LOG_INFO("Streaming response from subprocess: ~p", [self()])
+stream_from_subprocess(Req, Subprocess)
+    -> stream_from_subprocess(headers, Req, Subprocess)
+    .
+
+stream_from_subprocess(headers, Req, Subprocess)
+    -> ?LOG_DEBUG("Streaming header data from subprocess", [])
+    % TODO: Taking the easy way and assuming the headers arrive in the first data chunk.
+    % This should accumulate until \r\n\r\n or even \n\n is seen.
+    , {data, Data} = receive_from_subprocess(Subprocess)
+    , case binary:match(Data, <<"\r\n\r\n">>)
+        of nomatch
+            -> error({cgi_error, "Did not get headers in CGI script"})
+        ; {Pos, Length}
+            % Great. Pull out the binary with the headers, start a chunked response, and then kick off streaming the rest of the data.
+            -> HeaderSize = Pos + Length
+            , <<HeaderData:HeaderSize/binary, BodyData/binary>> = Data
+            , MochiHeaders = mochiweb_headers:from_binary(HeaderData)
+            , Status = case mochiweb_headers:get_value("Status", MochiHeaders)
+                of undefined -> 200
+                ; StatusStr -> list_to_integer(string:sub_word(StatusStr, 1))
+                end
+
+            % TODO: Not sure about this. The CGI script content-length is disagreeing with the chunked encoder.
+            , AllHeaders = [{couch_util:to_list(K), couch_util:to_list(V)} || {K, V} <- mochiweb_headers:to_list(MochiHeaders)]
+            , CouchHeaders = case lists:keytake("Content-Length", 1, AllHeaders)
+                of {value, _, Stripped} -> Stripped
+                ; false -> AllHeaders
+                end
+            , {ok, Resp} = couch_httpd:start_chunked_response(Req, Status, CouchHeaders)
+
+            % Wonderful. Send any remainder data and then stream the rest.
+            , ?LOG_DEBUG("Body: ~p", [BodyData])
+            , {ok, Resp} = couch_httpd:send_chunk(Resp, BodyData)
+            , stream_from_subprocess(body, Resp, Subprocess)
+        end
+    ;
+
+stream_from_subprocess(body, Resp, Subprocess)
+    -> case receive_from_subprocess(Subprocess)
+        of done
+            -> {ok, Resp}
+        ; {data, Data}
+            -> {ok, Resp} = couch_httpd:send_chunk(Resp, Data)
+            , stream_from_subprocess(body, Resp, Subprocess)
+        end
+    .
+
+receive_from_subprocess(Subprocess)
+    -> ?LOG_DEBUG("Streaming response from subprocess: ~p", [self()])
     , receive
         {Subprocess, {data, Data}} when is_port(Subprocess)
-            -> ?LOG_INFO("Sending ~p bytes from subprocess", [iolist_size(Data)])
-            , couch_httpd:send_chunk(Resp, Data)
-            , stream_from_subprocess(Resp, State)
+            -> ?LOG_DEBUG("Sending ~p bytes from subprocess", [iolist_size(Data)])
+            , ?LOG_DEBUG("Data: ~p", [Data])
+            , {data, Data}
         ; {'EXIT', Subprocess, Reason} when is_port(Subprocess)
             % Done. Return the chunks in order.
-            -> ?LOG_INFO("Subprocess exited: ~p", [Reason])
-            , {ok, Resp}
+            -> ?LOG_DEBUG("Subprocess exited: ~p", [Reason])
+            , done
         ; {'EXIT', Pid, Reason} when is_pid(Pid)
             -> ?LOG_ERROR("Linked process died", [])
             , exit({linked_process_died, Pid, Reason})
