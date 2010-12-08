@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 // Force node to run code from standard input.
 var stdin = process.openStdin()
   , buf = '';

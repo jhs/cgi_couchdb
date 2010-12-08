@@ -67,8 +67,7 @@ cgi_subprocess(ProgramName, Environment, SourceCode)
     , Args = case ProgramName
         of <<"node">>
             % NodeJS is special-cased because it is awesome. A static helper script makes it evaluate the code on standard input.
-            -> StdinJS = filename:join(code:priv_dir(?MODULE), "stdin.js")
-            , [binary_to_list(ProgramName), StdinJS]
+            -> [filename:join(code:priv_dir(?MODULE), "stdin.js")]
         ; _
             % Other programs presumably know how to do this already.
             -> [binary_to_list(ProgramName)]
