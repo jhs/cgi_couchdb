@@ -13,36 +13,36 @@ handle_cgi_req(Req, Db, DDoc)
     , {DDocBody} = DDoc#doc.body
     , case couch_util:get_value(<<"cgi">>, DDocBody)
         of undefined
-            -> error({not_found, "Design document has no CGI definitions"})
+            -> erlang:error({not_found, "Design document has no CGI definitions"})
         ; {CgiDefinitions}
             -> ?LOG_DEBUG("CGI definition: ~p", [CgiDefinitions])
             , case couch_util:get_value(CgiKey, CgiDefinitions)
                 of undefined
-                    -> error({not_found, io_lib:format("No such CGI definition: ~s", [CgiKey])})
+                    -> erlang:error({not_found, io_lib:format("No such CGI definition: ~s", [CgiKey])})
                 ; {CgiDefinition}
                     -> ProgramName = case couch_util:get_value(<<"exec">>, CgiDefinition)
                         of undefined
-                            -> error({not_found, io_lib:format("No \"exec\" field in CGI definition: ~s", [CgiKey])})
+                            -> erlang:error({not_found, io_lib:format("No \"exec\" field in CGI definition: ~s", [CgiKey])})
                         ; Unwelcome when not is_binary(Unwelcome)
-                            -> error({not_found, "CGI \"exec\" property must be a string"})
+                            -> erlang:error({not_found, "CGI \"exec\" property must be a string"})
                         ; Name -> Name
                         end
                     , Environment = case couch_util:get_value(<<"env">>, CgiDefinition)
                         of undefined -> []
                         ; null -> []
                         ; {Env} -> [{binary_to_list(K), binary_to_list(V)} || {K, V} <- Env]
-                        ; _ -> error({not_found, "CGI \"env\" property must be undefined, null, or an object"})
+                        ; _ -> erlang:error({not_found, "CGI \"env\" property must be undefined, null, or an object"})
                         end
 
                     , SourceCode = case couch_util:get_value(<<"code">>, CgiDefinition)
-                        of undefined -> error({not_found, "CGI \"code\" property must be defined"})
+                        of undefined -> erlang:error({not_found, "CGI \"code\" property must be defined"})
                         ; Inlined when is_binary(Inlined)
                             -> {inline, Inlined}
                         ; {CodeObj}
                             -> case couch_util:get_value(<<"attachment">>, CodeObj)
                                 of AttachmentName when is_binary(AttachmentName)
                                     -> {attachment, AttachmentName, DDoc}
-                                ; _ -> error({not_found, "CGI \"code\" object is missing \"attachment\" definition"})
+                                ; _ -> erlang:error({not_found, "CGI \"code\" object is missing \"attachment\" definition"})
                                 end
                         end
 
@@ -88,7 +88,7 @@ cgi_subprocess(ProgramName, Environment, SourceCode)
                     -> ?LOG_DEBUG("Attachments ~p: ~p", [Filename, DDoc#doc.atts])
                     , case lists:keyfind(Filename, 2, DDoc#doc.atts)
                         of false
-                            -> error({not_found, io_lib:format("No such attachment for CGI: ~s", [Filename])})
+                            -> erlang:error({not_found, io_lib:format("No such attachment for CGI: ~s", [Filename])})
                         ; Att when is_record(Att, att)
                             -> ?LOG_DEBUG("Processing attachment ~p with size ~p", [Att#att.name, Att#att.att_len])
                             , port_command(Port, [integer_to_list(Att#att.att_len), "\n"])
@@ -121,7 +121,7 @@ stream_from_subprocess(headers, Req, Subprocess)
     , {data, Data} = receive_from_subprocess(Subprocess)
     , case binary:match(Data, <<"\r\n\r\n">>)
         of nomatch
-            -> error({cgi_error, "Did not get headers in CGI script"})
+            -> erlang:error({cgi_error, "Did not get headers in CGI script"})
         ; {Pos, Length}
             % Great. Pull out the binary with the headers, start a chunked response, and then kick off streaming the rest of the data.
             -> HeaderSize = Pos + Length
