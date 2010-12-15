@@ -9,7 +9,7 @@
 
 handle_cgi_req(Req, Db, DDoc)
     -> ?LOG_DEBUG("CGI request: ~p", [Req#httpd.path_parts])
-    , [_Db, <<"_design">>, _DDName, _CgiTrigger, CgiKey | PathInfoParts] = Req#httpd.path_parts % TODO: queries for /_cgi and /_cgi/ are throwing badmatch
+    , [_Db, <<"_design">>, _DDName, _CgiTrigger, CgiKey | _PathInfoParts] = Req#httpd.path_parts % TODO: queries for /_cgi and /_cgi/ are throwing badmatch
     , {DDocBody} = DDoc#doc.body
     , case couch_util:get_value(<<"cgi">>, DDocBody)
         of undefined
@@ -52,8 +52,9 @@ handle_cgi_req(Req, Db, DDoc)
         end
     .
 
-run_cgi(Req, Db, DDoc, ProgramName, DDocEnv, SourceCode)
+run_cgi(Req, _Db, _DDoc, ProgramName, DDocEnv, SourceCode)
     -> ?LOG_DEBUG("Running CGI ~p with ~p against:\n~p", [ProgramName, DDocEnv, SourceCode])
+    % TODO: Somehow send the Db and DDoc to the CGI script, perhaps in the environment or something.
     , {ok, CgiEnv} = env_for_request(Req)
     , Environment = lists:keymerge(1, lists:keysort(1, DDocEnv), lists:keysort(1, CgiEnv)) % Prefer the ddoc environment over the auto-generated one.
     , {ok, Subprocess} = cgi_subprocess(ProgramName, Environment, SourceCode)
