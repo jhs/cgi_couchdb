@@ -90,8 +90,8 @@ cgi_subprocess(ProgramName, Environment, SourceCode)
                         of false
                             -> erlang:error({not_found, io_lib:format("No such attachment for CGI: ~s", [Filename])})
                         ; Att when is_record(Att, att)
-                            -> ?LOG_DEBUG("Processing attachment ~p with size ~p", [Att#att.name, Att#att.att_len])
-                            , port_command(Port, [integer_to_list(Att#att.att_len), "\n"])
+                            -> ?LOG_DEBUG("Processing attachment ~p with size ~p", [Att#att.name, Att#att.disk_len])
+                            , port_command(Port, [integer_to_list(Att#att.disk_len), "\n"])
                             , {ok, Port} = couch_doc:att_foldl_decode(Att, fun stream_to_subprocess/2, {ok, Port})
                             , ok
                         end
